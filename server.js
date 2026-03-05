@@ -74,19 +74,30 @@ window.WebSocket.prototype = OriginalWebSocket.prototype;
 
 async function startPoller() {
   console.log("Starting Puppeteer...");
-  const browser = await puppeteer.launch({
-    headless: "new",
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process', // <- This one often helps on Render
-      '--disable-gpu'
-    ]
-  });
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: "new",
+      // Specific path for the Puppeteer Docker image on Render
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--hide-scrollbars',
+        '--mute-audio'
+      ]
+    });
+    console.log("✅ Browser launched successfully");
+  } catch (err) {
+    console.error("❌ Failed to launch browser:", err.message);
+    return;
+  }
 
   const page = await browser.newPage();
 
