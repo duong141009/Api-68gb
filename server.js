@@ -79,7 +79,7 @@ async function startPoller() {
     browser = await puppeteer.launch({
       headless: "new",
       // Specific path for the Puppeteer Docker image on Render
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -87,10 +87,27 @@ async function startPoller() {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--single-process',
         '--disable-gpu',
         '--hide-scrollbars',
-        '--mute-audio'
+        '--mute-audio',
+        '--disable-extensions',
+        '--disable-component-update',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--force-color-profile=srgb',
+        '--disable-background-networking',
+        '--enable-features=NetworkService,NetworkServiceInProcess',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-breakpad',
+        '--disable-client-side-phishing-detection',
+        '--disable-default-apps',
+        '--disable-dev-shm-usage',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--disable-renderer-backgrounding',
+        '--disable-sync',
       ]
     });
     console.log("✅ Browser launched successfully");
