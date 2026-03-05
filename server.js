@@ -34,28 +34,35 @@ const custom_script = `
           return;
         }
 
+        // DEBUG: Log a snippet of every message to see what's flowing
+        if (text.length > 5) {
+            console.log("🕵️ WS Msg (first 50 chars):", text.substring(0, 50));
+        }
+
         // Detect game result packets
         let tableType = "";
-        if (text.includes("newmdsbgameend")) {
+        if (text.includes("newmdsbgameend") || text.includes("new_tai_xiu_result")) {
           tableType = "normal";
-        } else if (text.includes("mnmdsbgameend")) {
+        } else if (text.includes("mnmdsbgameend") || text.includes("md5_tai_xiu_result")) {
           tableType = "md5";
         }
 
         if (tableType) {
-          console.log("📥 Game end packet detected [" + tableType.toUpperCase() + "]");
+          console.log("🎯 MATCH FOUND! Table: " + tableType.toUpperCase() + " | Content: " + text);
           
           const sessionMatch = text.match(/#(\\d+)[_\\-]/);
           const sessionNumber = sessionMatch ? parseInt(sessionMatch[1], 10) : null;
 
           const dicesMatch = text.match(/\\{(\\d+)\\s*-\\s*(\\d+)\\s*-\\s*(\\d+)\\}/);
-          if (!sessionNumber || !dicesMatch) return;
+          if (!sessionNumber || !dicesMatch) {
+            console.log("⚠️ Could not parse session or dices from matched packet.");
+            return;
+          }
 
           const d1 = parseInt(dicesMatch[1], 10);
           const d2 = parseInt(dicesMatch[2], 10);
           const d3 = parseInt(dicesMatch[3], 10);
 
-          // Ship data back to Node.js for processing
           if (window.handleGameResult) {
             window.handleGameResult(tableType, d1, d2, d3, sessionNumber);
           }
@@ -156,12 +163,15 @@ async function startPoller() {
 
   try {
     console.log("Navigating to game site...");
-    await page.goto('https://68gbvn25.biz', { waitUntil: 'networkidle2', timeout: 60000 });
+    await page.goto('https://68gbvn25.biz', { waitUntil: 'networkidle2', timeout: 90000 });
+
+    console.log("Waiting 15s for game hall to load...");
+    await new Promise(r => setTimeout(r, 15000));
 
     console.log("Injecting WebSocket hook...");
     await page.evaluate(custom_script);
 
-    console.log("Poller is running. Monitoring WebSocket traffic...");
+    console.log("Poller is live. Monitoring logs for '🎯 MATCH FOUND'...");
   } catch (err) {
     console.error("Error during navigation or injection:", err);
   }
