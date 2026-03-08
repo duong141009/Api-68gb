@@ -256,7 +256,6 @@ class BotTXMD5(BaseBot):
 
 # ─── LAUNCHER ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    global bot_txhu, bot_txmd5
     bot_txhu = BotTXHu()
     bot_txmd5 = BotTXMD5()
     
