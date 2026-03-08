@@ -65,6 +65,12 @@ async function fetchToken() {
         console.log("📡 [FETCH-JS] Đang tải game...");
         await page.goto(GAME_URL, { waitUntil: 'networkidle2', timeout: 90000 });
 
+        // Safety EXIT after 2 minutes if still stuck
+        const safetyFinal = setTimeout(() => {
+            console.log("💀 [CRITICAL] Token fetcher stuck too long. Exiting.");
+            process.exit(1);
+        }, 120000);
+
         // Click phá popup
         await page.mouse.click(600, 500);
         console.log("🖱️ [FETCH-JS] Đã click giả lập...");

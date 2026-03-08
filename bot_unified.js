@@ -71,6 +71,8 @@ class Bot68GB {
 
         this.ws.on('open', () => {
             console.log(`🌐 [WS] Connected.`);
+            this.txhu.last_msg = Date.now(); // Reset timestamp khi mới kết nối
+            this.md5.last_msg = Date.now();
             this.ws.send(this.shared.PKT_HANDSHAKE);
             this.heartbeat = setInterval(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
@@ -79,7 +81,8 @@ class Bot68GB {
 
                     const now = Date.now();
                     // Nếu quá 30 giây không có data mới, ép re-subscribe
-                    if (now - this.txhu.last_msg > 30000 || now - this.md5.last_msg > 30000) {
+                    // CHỈ re-subscribe nếu ĐÃ AUTH XONG để tránh bị server kick
+                    if (this.auth_done && (now - this.txhu.last_msg > 30000 || now - this.md5.last_msg > 30000)) {
                         console.log(`📡 [WS] Data stale (>30s). Re-entering rooms...`);
                         const reEntry = [
                             "mnshaibao.mnshaibaohandler.entergameroom",
