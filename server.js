@@ -71,6 +71,13 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] Unified API on Port ${PORT}`);
+
+    // Nếu chạy trên Render hoặc không có token file, tự động kích hoạt lấy token
+    if (!fs.existsSync(TOKEN_FILE) || process.env.RENDER) {
+        console.log("🆕 [INIT] Không tìm thấy Token hoặc đang chạy Cloud. Đang tự động lấy mã...");
+        setTimeout(triggerAutoFetch, 5000); // Chờ server lên hẳn rồi fetch
+    }
+
     bot.run();
 });
 
