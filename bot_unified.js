@@ -10,6 +10,10 @@ class Bot68GB {
 
         this.txhu = { history: [], last_result: null, last_sig: "", prev_session: 0, last_msg: Date.now() };
         this.md5 = { history: [], last_result: null, last_sig: "", prev_session: 0, last_msg: Date.now(), current_md5: "" };
+
+        this.reconnect_delay = 1000;
+        this.max_reconnect_delay = 30000;
+        this.auth_timeout = null;
     }
 
     _makePacket(route, body = "{}") {
@@ -31,7 +35,8 @@ class Bot68GB {
     _authFlow() {
         if (this.auth_done) return;
         console.log(`🚀 [AUTH] Khởi động...`);
-        setTimeout(() => {
+        if (this.auth_timeout) clearTimeout(this.auth_timeout);
+        this.auth_timeout = setTimeout(() => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
             this.ws.send(this.shared.PKT_AUTH);
 
@@ -49,7 +54,11 @@ class Bot68GB {
                         this.ws.send(this._makePacket(r));
                 }, 400 * (i + 1));
             });
-            setTimeout(() => { this.auth_done = true; console.log("✅ [AUTH] Hoàn tất!"); }, 6000);
+            setTimeout(() => {
+                this.auth_done = true;
+                this.reconnect_delay = 1000; // Reset delay when auth succeeds
+                console.log("✅ [AUTH] Hoàn tất!");
+            }, 6000);
         }, 1000);
     }
 
@@ -103,10 +112,17 @@ class Bot68GB {
             }
         });
 
-        this.ws.on('close', () => {
+        this.ws.on('close', (code, reason) => {
+            console.log(`🔌 [WS] Closed. Code: ${code}, Reason: ${reason}`);
             this.auth_done = false;
             if (this.heartbeat) clearInterval(this.heartbeat);
-            setTimeout(() => this.run(), 5000);
+            if (this.auth_timeout) clearTimeout(this.auth_timeout);
+
+            console.log(`🔁 [WS] Reconnecting in ${this.reconnect_delay / 1000}s...`);
+            setTimeout(() => {
+                this.reconnect_delay = Math.min(this.reconnect_delay * 1.5, this.max_reconnect_delay);
+                this.run();
+            }, this.reconnect_delay);
         });
     }
 
