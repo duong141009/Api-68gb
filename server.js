@@ -1,6 +1,6 @@
 const http = require('http');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, execSync, spawn } = require('child_process');
 const Bot68GB = require('./bot_unified');
 
 // ─── CẤU HÌNH ────────────────────────────────────────────────────────────────
@@ -29,31 +29,51 @@ if (fs.existsSync(TOKEN_FILE)) {
 
 const bot = new Bot68GB(shared);
 
+let fetcherChild = null;
+
 function triggerAutoFetch() {
-    if (shared.fetcherActive) {
-        console.log("⏳ [SYSTEM] Fetcher already active. Double-check for zombies...");
-        // Re-check safety but don't spawn another one if flag is true
+    if (shared.fetcherActive && fetcherChild && !fetcherChild.killed) {
+        console.log("⏳ [SYSTEM] Fetcher đang chạy (PID: " + fetcherChild.pid + "). Bỏ qua.");
         return;
     }
 
-    // NUCLEAR: Kill any existing node fetchers before starting
+    // Kill zombie fetchers (đồng bộ để tránh race condition)
     try {
-        exec('pkill -f "node auto_fetcher.js"');
-        console.log("🧹 [SYSTEM] Cleaning up any old fetcher processes...");
-    } catch (e) { }
+        execSync('pkill -f "node auto_fetcher.js" 2>/dev/null || true', { timeout: 3000 });
+        console.log("🧹 [SYSTEM] Đã dọn old fetcher processes.");
+    } catch (e) { /* ignore */ }
 
-    shared.fetcherActive = true;
-    console.log("🔄 [SYSTEM] Triggering auto_fetcher...");
-    const cmd = `node auto_fetcher.js`;
-    const child = exec(cmd, { env: { ...process.env, BOT_SERVER: `http://localhost:${PORT}/api/token` } });
+    // Đợi 500ms để đảm bảo pkill hoàn tất
+    setTimeout(() => {
+        shared.fetcherActive = true;
+        console.log("🔄 [SYSTEM] Spawning auto_fetcher...");
 
-    child.stdout.on('data', data => process.stdout.write(`[FETCHER] ${data}`));
-    child.stderr.on('data', data => process.stderr.write(`[FETCHER-ERR] ${data}`));
+        fetcherChild = spawn('node', ['auto_fetcher.js'], {
+            env: { ...process.env, BOT_SERVER: `http://localhost:${PORT}/api/token` },
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
 
-    child.on('exit', (code) => {
-        shared.fetcherActive = false;
-        console.log(`🏁 [SYSTEM] Fetcher child process exited with code ${code}`);
-    });
+        console.log(`📌 [SYSTEM] Fetcher PID: ${fetcherChild.pid}`);
+
+        fetcherChild.stdout.on('data', data => process.stdout.write(`[FETCHER] ${data}`));
+        fetcherChild.stderr.on('data', data => process.stderr.write(`[FETCHER-ERR] ${data}`));
+
+        fetcherChild.on('exit', (code, signal) => {
+            shared.fetcherActive = false;
+            fetcherChild = null;
+            if (signal) {
+                console.log(`🏁 [SYSTEM] Fetcher bị kill bởi signal: ${signal}`);
+            } else {
+                console.log(`🏁 [SYSTEM] Fetcher thoát với code: ${code}`);
+            }
+        });
+
+        fetcherChild.on('error', (err) => {
+            shared.fetcherActive = false;
+            fetcherChild = null;
+            console.error(`❌ [SYSTEM] Không thể spawn fetcher: ${err.message}`);
+        });
+    }, 500);
 }
 
 const server = http.createServer((req, res) => {
