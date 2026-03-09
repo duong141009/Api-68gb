@@ -15,7 +15,8 @@ const shared = {
     PKT_HEARTBEAT: Buffer.from('03000000', 'hex'),
     PKT_AUTH: Buffer.from('0400004d01010001080210ca011a406436373738663230343862333434346662333661333535393837363162624036333634653530346431343234626163393738666363616464383839623466654200', 'hex'),
     COOKIES: "",
-    SESSION_READY: false
+    SESSION_READY: false,
+    fetcherActive: false
 };
 
 if (fs.existsSync(TOKEN_FILE)) {
@@ -26,11 +27,22 @@ if (fs.existsSync(TOKEN_FILE)) {
 const bot = new Bot68GB(shared);
 
 function triggerAutoFetch() {
+    if (shared.fetcherActive) {
+        console.log("⏳ [SYSTEM] Fetcher already active. Skipping duplicate trigger.");
+        return;
+    }
+    shared.fetcherActive = true;
     console.log("🔄 [SYSTEM] Triggering auto_fetcher...");
     const cmd = `node auto_fetcher.js`;
     const child = exec(cmd, { env: { ...process.env, BOT_SERVER: `http://localhost:${PORT}/api/token` } });
+
     child.stdout.on('data', data => process.stdout.write(`[FETCHER] ${data}`));
     child.stderr.on('data', data => process.stderr.write(`[FETCHER-ERR] ${data}`));
+
+    child.on('exit', (code) => {
+        shared.fetcherActive = false;
+        console.log(`🏁 [SYSTEM] Fetcher child process exited with code ${code}`);
+    });
 }
 
 const server = http.createServer((req, res) => {
