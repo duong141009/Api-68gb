@@ -5,7 +5,7 @@ const GAME_URL = "https://68gbvn88.bar/";
 const BOT_SERVER = process.env.BOT_SERVER || "http://localhost:8080/api/token";
 
 async function fetchToken() {
-    console.log("🚀 [FETCH-JS] Khởi động trình duyệt...");
+    console.log("🚀 [FETCH-JS] Khởi động trình duyệt (Chế độ SIÊU TỐC)...");
 
     let browser;
     try {
@@ -23,93 +23,68 @@ async function fetchToken() {
             defaultViewport: { width: 1280, height: 720 }
         });
 
-        // Ưu tiên Chrome trên hệ thống nếu có
-        const paths = ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome'];
-        for (const p of paths) {
-            if (fs.existsSync(p)) {
-                browser.executablePath = p;
-                break;
-            }
-        }
-
         const page = await browser.newPage();
         await page.setUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36");
 
         let tokenCaptured = false;
 
-        // API CAO CẤP: Bắt WebSocket frames
+        // Bắt WebSocket frames ngay lập tức
         page.on('websocket', ws => {
-            console.log(`🔗 [FETCH-JS] WebSocket Created: ${ws.url()}`);
+            console.log(`🔗 [FETCH-JS] WebSocket Open: ${ws.url()}`);
 
             ws.on('framesent', async (frame) => {
                 if (tokenCaptured) return;
 
                 const buffer = Buffer.from(frame.payloadData, 'base64');
-                console.log(`📡 [SENT] Type: 0x${buffer[0].toString(16).padStart(2, '0')}, Len: ${buffer.length}`);
+                // Log để debug nhan con mẹ m luôn
+                console.log(`📡 [SENT] Hex: ${buffer.slice(0, 5).toString('hex')}... (${buffer.length}b)`);
 
                 if (buffer.length > 50 && buffer[0] === 0x04) {
                     tokenCaptured = true;
                     const hex = buffer.toString('hex');
-                    console.log("✅ [FETCH-JS] Captured Auth Token! Stabilizing cookies...");
+                    console.log("✅ [FETCH-JS] Captured TOKEN! Exiting immediately...");
 
-                    setTimeout(async () => {
-                        try {
-                            const cookies = await page.cookies();
-                            const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+                    try {
+                        const cookies = await page.cookies();
+                        const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
-                            const response = await fetch(BOT_SERVER, {
-                                method: 'POST',
-                                body: JSON.stringify({
-                                    token: hex,
-                                    ws_url: ws.url(),
-                                    cookies: cookieStr
-                                }),
-                                headers: { 'Content-Type': 'application/json' }
-                            });
-                            const res = await response.json();
-                            console.log("🤖 [BOT-RESPONSE]:", res);
-                            if (res.status === "ok") {
-                                console.log("🏁 [FINISH] Task Complete. Exiting.");
-                                await browser.close();
-                                process.exit(0);
-                            }
-                        } catch (e) {
-                            console.error("❌ [ERROR] Failed to send token:", e.message);
+                        const response = await fetch(BOT_SERVER, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                token: hex,
+                                ws_url: ws.url(),
+                                cookies: cookieStr
+                            }),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        const res = await response.json();
+                        console.log("🤖 [BOT-RESPONSE]:", res);
+
+                        if (res.status === "ok") {
+                            console.log("🏁 [FINISH] Done. Powering down.");
+                            await browser.close();
+                            process.exit(0);
                         }
-                    }, 5000);
+                    } catch (e) {
+                        console.error("❌ [ERROR]:", e.message);
+                        process.exit(1);
+                    }
                 }
-            });
-
-            ws.on('framereceived', frame => {
-                // Optional: Log incoming patterns if needed for debug
             });
         });
 
-        console.log("📡 [FETCH-JS] Navigating to game...");
-        await page.goto(GAME_URL, { waitUntil: 'load', timeout: 90000 });
-        console.log("✅ [FETCH-JS] Page Loaded.");
+        console.log("📡 [FETCH-JS] Navigating... (Instant capture mode)");
+        // Không đợi load, chỉ cần trang bắt đầu tải là bắt đầu bắt WS
+        await page.goto(GAME_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // Loop tương tác liên tục cho đến khi có token
-        const interactionLoop = setInterval(async () => {
-            if (tokenCaptured) {
-                clearInterval(interactionLoop);
-                return;
-            }
-
-            const x = Math.floor(Math.random() * 400) + 400;
-            const y = Math.floor(Math.random() * 300) + 200;
-            try {
-                await page.mouse.click(x, y);
-                console.log(`🖱️ [FETCH-JS] Click interaction at [${x}, ${y}]`);
-            } catch (e) { }
-        }, 3000);
-
-        // Safety timeout
+        // Safety timeout rút ngắn xuống 2 phút cho tốc độ cao
         setTimeout(async () => {
-            console.log("⏰ [TIMEOUT] Failed to capture token in 5 minutes.");
-            if (browser) await browser.close();
-            process.exit(1);
-        }, 300000);
+            if (!tokenCaptured) {
+                console.log("⏰ [TIMEOUT] Token not found in 2m.");
+                if (browser) await browser.close();
+                process.exit(1);
+            }
+        }, 120000);
 
     } catch (err) {
         console.error("❌ [CRITICAL-ERROR]:", err.message);
