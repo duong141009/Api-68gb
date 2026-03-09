@@ -151,9 +151,13 @@ async function fetchToken() {
         console.log(`⏳ [WAIT] Chờ token (max 30s)... WS: ${Object.keys(wsMap).length}`);
 
         await new Promise((resolve) => {
-            const timeout = setTimeout(() => {
+            const timeout = setTimeout(async () => {
                 if (!tokenCaptured) {
                     console.log(`⏰ [TIMEOUT] Hết 30s. WS mở: ${Object.keys(wsMap).length}`);
+                    try {
+                        const content = await page.content();
+                        console.log(`[PAGE HTML] ${content.substring(0, 500)}...`);
+                    } catch (e) { }
                     resolve();
                 }
             }, 30000); // 30s timeout
