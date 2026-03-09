@@ -99,17 +99,16 @@ class Bot68GB {
                     }
 
                     if (this.auth_done) {
-                        // Tách riêng check stale cho từng game
-                        if (now - this.txhu.last_msg > 35000) {
-                            console.log(`📡 [${this.name}] [WS] TX Hũ data stale (>35s). Re-entering...`);
+                        // Tách riêng check stale cho từng game (tăng lên 90s để bù cho vòng cược dài)
+                        if (now - this.txhu.last_msg > 90000) {
+                            console.log(`📡 [${this.name}] [WS] TX Hũ data stale (>90s). Re-entering...`);
                             ["mnshaibao.mnshaibaohandler.entergameroom", "mnshaibao.mnshaibaohandler.getgamescene"].forEach((r, i) => {
                                 setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
                             });
                             this.txhu.last_msg = now; // Tránh spam re-entry
                         }
-
-                        if (now - this.md5.last_msg > 35000) {
-                            console.log(`📡 [${this.name}] [WS] TX MD5 data stale (>35s). Re-entering...`);
+                        if (now - this.md5.last_msg > 90000) {
+                            console.log(`📡 [${this.name}] [WS] TX MD5 data stale (>90s). Re-entering...`);
                             ["mnmdsb.mnmdsbhandler.entergameroom", "mnmdsb.mnmdsbhandler.getgamescene"].forEach((r, i) => {
                                 setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
                             });
@@ -126,6 +125,8 @@ class Bot68GB {
                 this.ws.send(this.shared.PKT_HANDSHAKE_ACK);
                 this._authFlow();
             } else if (data[0] === 0x04) {
+                this.txhu.last_msg = Date.now(); // Cập nhật heartbeat khi có bất kỳ data data nào
+                this.md5.last_msg = Date.now();
                 this._parse(data);
             } else if (data[0] === 0x05) {
                 console.log(`⚠️ [${this.name}] [WS] Bị KICK.`);
