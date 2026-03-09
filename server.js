@@ -107,6 +107,12 @@ const server = http.createServer((req, res) => {
                 const hex = data.token.replace(/b'|'|\\x| /g, "");
                 shared.PKT_AUTH = Buffer.from(hex, 'hex');
 
+                if (data.handshake) {
+                    const hsHex = data.handshake.replace(/b'|'|\\x| /g, "");
+                    shared.PKT_HANDSHAKE = Buffer.from(hsHex, 'hex');
+                    console.log(`🤝 [TOKEN] Cập nhật Handshake chuẩn từ browser! (${shared.PKT_HANDSHAKE.length} bytes)`);
+                }
+
                 if (data.ws_url) {
                     shared.WS_URL = data.ws_url;
                     console.log(`📡 [TOKEN] New WebSocket URL: ${shared.WS_URL}`);
