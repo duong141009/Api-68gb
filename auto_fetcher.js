@@ -19,7 +19,12 @@ async function fetchToken() {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--no-zygote' // Thay cho --single-process để ổn định hơn
+                '--no-zygote',
+                '--disable-extensions',
+                '--disable-infobars',
+                '--window-position=0,0',
+                '--ignore-certificate-errors',
+                '--ignore-certificate-errors-spki-list'
             ]
         };
 
@@ -52,30 +57,33 @@ async function fetchToken() {
 
             if (buffer.length > 50 && buffer[0] === 0x04) {
                 const hex = buffer.toString('hex');
-                console.log("✅ [FETCH-JS] Bắt được Token! Đang gửi về Bot...");
+                console.log("✅ [FETCH-JS] Bắt được Token! Đợi 5s để ổn định cookie...");
 
-                try {
-                    const cookies = await page.cookies();
-                    const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+                setTimeout(async () => {
+                    try {
+                        const cookies = await page.cookies();
+                        console.log(`📡 [FETCH-JS] Số lượng cookie captured: ${cookies.length}`);
+                        const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
-                    const response = await fetch(BOT_SERVER, {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            token: hex,
-                            ws_url: captured_ws_url,
-                            cookies: cookieStr
-                        }),
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    const res = await response.json();
-                    console.log("🤖 [BOT] Phản hồi:", res);
-                    if (res.status === "ok") {
-                        console.log("🏁 [FINISH] Hoàn tất!");
-                        process.exit(0);
+                        const response = await fetch(BOT_SERVER, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                token: hex,
+                                ws_url: captured_ws_url,
+                                cookies: cookieStr
+                            }),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        const res = await response.json();
+                        console.log("🤖 [BOT] Phản hồi:", res);
+                        if (res.status === "ok") {
+                            console.log("🏁 [FINISH] Hoàn tất!");
+                            process.exit(0);
+                        }
+                    } catch (e) {
+                        console.error("❌ [ERROR] Lỗi gửi token/cookie:", e.message);
                     }
-                } catch (e) {
-                    console.error("❌ [ERROR] Lỗi gửi token:", e.message);
-                }
+                }, 5000);
             }
         });
 

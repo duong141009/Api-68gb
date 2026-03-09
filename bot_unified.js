@@ -35,7 +35,7 @@ class Bot68GB {
 
     _authFlow() {
         if (this.auth_done) return;
-        console.log(`🚀 [AUTH] Khởi động...`);
+        console.log(`🚀 [${this.name}] [AUTH] Khởi động...`);
         if (this.auth_timeout) clearTimeout(this.auth_timeout);
         this.auth_timeout = setTimeout(() => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
@@ -62,7 +62,7 @@ class Bot68GB {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     this.auth_done = true;
                     this.reconnect_delay = 1000; // Reset delay when auth succeeds
-                    console.log("✅ [AUTH] Hoàn tất!");
+                    console.log(`✅ [${this.name}] [AUTH] Hoàn tất!`);
                 }
             }, 6000);
         }, 1000);
@@ -78,7 +78,7 @@ class Bot68GB {
         this.ws = new WebSocket(this.shared.WS_URL, { headers });
 
         this.ws.on('open', () => {
-            console.log(`🌐 [WS] Connected.`);
+            console.log(`🌐 [${this.name}] [WS] Connected.`);
             this.txhu.last_msg = Date.now(); // Reset timestamp khi mới kết nối
             this.md5.last_msg = Date.now();
             this.ws.send(this.shared.PKT_HANDSHAKE);
@@ -93,7 +93,7 @@ class Bot68GB {
                     // Kiểm tra im lặng tuyệt đối (không có bất kỳ message nào trong 60s)
                     const lastAny = Math.max(this.txhu.last_msg, this.md5.last_msg);
                     if (now - lastAny > 60000) {
-                        console.log("💀 [WS] Tuyệt đối im lặng (>60s). Đang ép kết nối lại...");
+                        console.log(`💀 [${this.name}] [WS] Tuyệt đối im lặng (>60s). Đang ép kết nối lại...`);
                         this.ws.close();
                         return;
                     }
@@ -101,7 +101,7 @@ class Bot68GB {
                     if (this.auth_done) {
                         // Tách riêng check stale cho từng game
                         if (now - this.txhu.last_msg > 35000) {
-                            console.log(`📡 [WS] TX Hũ data stale (>35s). Re-entering...`);
+                            console.log(`📡 [${this.name}] [WS] TX Hũ data stale (>35s). Re-entering...`);
                             ["mnshaibao.mnshaibaohandler.entergameroom", "mnshaibao.mnshaibaohandler.getgamescene"].forEach((r, i) => {
                                 setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
                             });
@@ -109,7 +109,7 @@ class Bot68GB {
                         }
 
                         if (now - this.md5.last_msg > 35000) {
-                            console.log(`📡 [WS] TX MD5 data stale (>35s). Re-entering...`);
+                            console.log(`📡 [${this.name}] [WS] TX MD5 data stale (>35s). Re-entering...`);
                             ["mnmdsb.mnmdsbhandler.entergameroom", "mnmdsb.mnmdsbhandler.getgamescene"].forEach((r, i) => {
                                 setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
                             });
@@ -128,31 +128,31 @@ class Bot68GB {
             } else if (data[0] === 0x04) {
                 this._parse(data);
             } else if (data[0] === 0x05) {
-                console.log(`⚠️ [WS] Bị KICK.`);
+                console.log(`⚠️ [${this.name}] [WS] Bị KICK.`);
                 this.ws.close();
             } else {
                 // Log unhandled packet types once to see if server sends error/info
                 if (!this._logged_types) this._logged_types = new Set();
                 if (!this._logged_types.has(data[0])) {
-                    console.log(`ℹ️ [WS] Nhận packet loại: 0x${data[0].toString(16).padStart(2, '0')}`);
+                    console.log(`ℹ️ [${this.name}] [WS] Nhận packet loại: 0x${data[0].toString(16).padStart(2, '0')}`);
                     this._logged_types.add(data[0]);
                 }
             }
         });
 
         this.ws.on('error', (err) => {
-            console.error(`❌ [WS] Lỗi kết nối: ${err.message}`);
+            console.error(`❌ [${this.name}] [WS] Lỗi kết nối: ${err.message}`);
         });
 
         this.ws.on('close', (code, reason) => {
-            console.log(`🔌 [WS] Closed. Code: ${code}, Reason: ${reason}`);
+            console.log(`🔌 [${this.name}] [WS] Closed. Code: ${code}, Reason: ${reason}`);
             this.auth_done = false;
             if (this.heartbeat) clearInterval(this.heartbeat);
             if (this.auth_timeout) clearTimeout(this.auth_timeout);
             if (this.auth_done_timeout) clearTimeout(this.auth_done_timeout);
             this._logged_types = null;
 
-            console.log(`🔁 [WS] Reconnecting in ${this.reconnect_delay / 1000}s...`);
+            console.log(`🔁 [${this.name}] [WS] Reconnecting in ${this.reconnect_delay / 1000}s...`);
             setTimeout(() => {
                 this.reconnect_delay = Math.min(this.reconnect_delay * 1.5, this.max_reconnect_delay);
                 this.run();
@@ -249,7 +249,7 @@ class Bot68GB {
         if (hist.length > 300) hist.shift();
         target.last_result = entry;
 
-        console.log(`🎰 [${game}] #${s} | ${total} ${res} | ${d1}-${d2}-${d3}`);
+        console.log(`🎰 [${this.name}] [${game}] #${s} | ${total} ${res} | ${d1}-${d2}-${d3}`);
     }
 
     isAlive() { return this.ws && this.ws.readyState === WebSocket.OPEN && this.auth_done; }

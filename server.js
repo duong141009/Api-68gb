@@ -14,7 +14,8 @@ const shared = {
     PKT_HANDSHAKE_ACK: Buffer.from('02000000', 'hex'),
     PKT_HEARTBEAT: Buffer.from('03000000', 'hex'),
     PKT_AUTH: Buffer.from('0400004d01010001080210ca011a406436373738663230343862333434346662333661333535393837363162624036333634653530346431343234626163393738666363616464383839623466654200', 'hex'),
-    COOKIES: ""
+    COOKIES: "",
+    SESSION_READY: false
 };
 
 if (fs.existsSync(TOKEN_FILE)) {
@@ -55,11 +56,13 @@ const server = http.createServer((req, res) => {
                     console.log(`📡 [TOKEN] New WebSocket URL: ${shared.WS_URL}`);
                 }
 
-                if (data.cookies) {
+                if (data.cookies !== undefined) {
                     shared.COOKIES = data.cookies;
-                    console.log(`🍪 [TOKEN] Cookies updated!`);
+                    console.log(`🍪 [TOKEN] Cookies updated! (Length: ${data.cookies.length})`);
+                    if (data.cookies === "") console.log("⚠️ [TOKEN] Warning: Cookies are empty!");
                 }
 
+                shared.SESSION_READY = true;
                 fs.writeFileSync(TOKEN_FILE, shared.PKT_AUTH);
                 console.log("🔥 [TOKEN] Shared Token Updated!");
                 if (bot.ws) bot.ws.close();
@@ -94,9 +97,9 @@ server.listen(PORT, '0.0.0.0', () => {
             console.log("⏳ [WAIT] Đang đợi fetcher cung cấp Token/URL lần đầu...");
             let retryCount = 0;
             const checkInitial = setInterval(() => {
-                if (shared.COOKIES && shared.COOKIES !== "") {
+                if (shared.SESSION_READY) {
                     clearInterval(checkInitial);
-                    console.log("🚀 [START] Đã có dữ liệu phiên bộ lọc. Khởi động Bot...");
+                    console.log("🚀 [START] Đã có dữ liệu phiên bộ lọc (SESSION_READY). Khởi động Bot...");
                     bot.run();
                 } else {
                     retryCount++;
