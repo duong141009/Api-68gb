@@ -25,7 +25,8 @@ async function fetchToken() {
                 '--window-position=0,0',
                 '--ignore-certificate-errors',
                 '--ignore-certificate-errors-spki-list'
-            ]
+            ],
+            defaultViewport: { width: 1280, height: 720 }
         };
 
         // Ưu tiên path trên Render/Docker pptr image
@@ -54,6 +55,9 @@ async function fetchToken() {
         client.on('Network.webSocketFrameSent', async (params) => {
             const payload = params.response.payloadData;
             const buffer = Buffer.from(payload, 'base64');
+
+            // LOG TẤT CẢ GÓI TIN ĐI ĐỂ DEBUG (CHỈ LOG 10 BYTE ĐẦU)
+            console.log(`📡 [SENT] Type: 0x${buffer[0].toString(16).padStart(2, '0')}, Len: ${buffer.length}, Hex: ${buffer.slice(0, 10).toString('hex')}...`);
 
             if (buffer.length > 50 && buffer[0] === 0x04) {
                 const hex = buffer.toString('hex');
@@ -97,9 +101,23 @@ async function fetchToken() {
             process.exit(1);
         }, 300000);
 
-        // Click phá popup
-        await page.mouse.click(600, 500);
-        console.log("🖱️ [FETCH-JS] Đã click giả lập...");
+        // Click phá popup - Loop nhiều lần ở nhiều tọa độ
+        console.log("🖱️ [FETCH-JS] Khởi động tương tác giả lập...");
+        const clicks = [
+            { x: 640, y: 360 }, // Tâm
+            { x: 640, y: 500 }, // Hơi thấp
+            { x: 100, y: 100 }, // Góc
+            { x: 1100, y: 600 } // Góc
+        ];
+
+        for (const pos of clicks) {
+            await page.mouse.click(pos.x, pos.y);
+            console.log(`🖱️ [FETCH-JS] Click tại [${pos.x}, ${pos.y}]`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+
+        console.log("⏳ [FETCH-JS] Đang đợi WebSocket Auth sinh ra (đợi 20s)...");
+        await new Promise(r => setTimeout(r, 20000));
 
         // Timeout 4 phút
         setTimeout(() => {

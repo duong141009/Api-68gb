@@ -103,7 +103,7 @@ server.listen(PORT, '0.0.0.0', () => {
                     bot.run();
                 } else {
                     retryCount++;
-                    if (retryCount % 15 === 0) { // Thử lại mỗi 30s nếu chưa có token
+                    if (retryCount % 60 === 0) { // Thử lại mỗi 120s (60 * 2000ms) để tiết kiệm RAM trên Render
                         console.log("🔁 [RETRY] Vẫn đang chờ Token... Thử trigger lại fetcher.");
                         triggerAutoFetch();
                     }
