@@ -138,6 +138,10 @@ class Bot68GB {
             }
         });
 
+        this.ws.on('error', (err) => {
+            console.error(`❌ [WS] Lỗi kết nối: ${err.message}`);
+        });
+
         this.ws.on('close', (code, reason) => {
             console.log(`🔌 [WS] Closed. Code: ${code}, Reason: ${reason}`);
             this.auth_done = false;

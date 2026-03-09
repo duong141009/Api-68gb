@@ -27,7 +27,9 @@ const bot = new Bot68GB(shared);
 function triggerAutoFetch() {
     console.log("🔄 [SYSTEM] Triggering auto_fetcher...");
     const cmd = `node auto_fetcher.js`;
-    exec(cmd, { env: { ...process.env, BOT_SERVER: `http://localhost:${PORT}/api/token` } });
+    const child = exec(cmd, { env: { ...process.env, BOT_SERVER: `http://localhost:${PORT}/api/token` } });
+    child.stdout.on('data', data => process.stdout.write(`[FETCHER] ${data}`));
+    child.stderr.on('data', data => process.stderr.write(`[FETCHER-ERR] ${data}`));
 }
 
 const server = http.createServer((req, res) => {
@@ -87,10 +89,25 @@ server.listen(PORT, '0.0.0.0', () => {
     // Nếu chạy trên Render hoặc không có token file, tự động kích hoạt lấy token
     if (!fs.existsSync(TOKEN_FILE) || process.env.RENDER) {
         console.log("🆕 [INIT] Không tìm thấy Token hoặc đang chạy Cloud. Đang tự động lấy mã...");
-        setTimeout(triggerAutoFetch, 5000); // Chờ server lên hẳn rồi fetch
-    }
 
-    bot.run();
+        // Trên Cloud, đợi fetcher có token lần đầu rồi mới chạy Bot để tránh 1006 loop
+        if (process.env.RENDER) {
+            console.log("⏳ [WAIT] Đang đợi fetcher cung cấp Token/URL lần đầu...");
+            const checkInitial = setInterval(() => {
+                if (shared.COOKIES !== "") { // Dùng Cookies làm dấu hiệu đã fetch xong
+                    clearInterval(checkInitial);
+                    console.log("🚀 [START] Đã có dữ liệu phiên mới. Khởi động Bot...");
+                    bot.run();
+                }
+            }, 2000);
+            setTimeout(triggerAutoFetch, 2000);
+        } else {
+            setTimeout(triggerAutoFetch, 5000);
+            bot.run();
+        }
+    } else {
+        bot.run();
+    }
 });
 
 function getLandingPage(botStatus) {
