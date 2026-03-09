@@ -8,8 +8,8 @@
         "dev": "node server.js"
     },
     "dependencies": {
-        "ws": "^8.18.0",
-        "puppeteer": "^22.6.0"
+        "puppeteer": "^22.15.0",
+        "ws": "^8.18.0"
     },
     "engines": {
         "node": ">=18.0.0"
