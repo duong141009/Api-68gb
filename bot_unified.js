@@ -15,6 +15,8 @@ class Bot68GB {
         this.reconnect_delay = 1000;
         this.max_reconnect_delay = 30000;
         this.auth_timeout = null;
+        this.auth_done_timeout = null;
+        this.heartbeat = null;
     }
 
     _makePacket(route, body = "{}") {
@@ -39,6 +41,11 @@ class Bot68GB {
         if (this.auth_timeout) clearTimeout(this.auth_timeout);
         this.auth_timeout = setTimeout(() => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+            if (!this.shared.PKT_AUTH) {
+                console.log(`⚠️ [${this.name}] [AUTH] Chưa có PKT_AUTH. Đóng kết nối để chờ token...`);
+                this.ws.close();
+                return;
+            }
             this.ws.send(this.shared.PKT_AUTH);
 
             const routes = [
@@ -79,6 +86,7 @@ class Bot68GB {
 
         this.ws.on('open', () => {
             console.log(`🌐 [${this.name}] [WS] Connected.`);
+            if (this.heartbeat) clearInterval(this.heartbeat); // Clear trước khi tạo mới, tránh leak
             this.txhu.last_msg = Date.now(); // Reset timestamp khi mới kết nối
             this.md5.last_msg = Date.now();
             this.ws.send(this.shared.PKT_HANDSHAKE);
@@ -146,7 +154,8 @@ class Bot68GB {
         });
 
         this.ws.on('close', (code, reason) => {
-            console.log(`🔌 [${this.name}] [WS] Closed. Code: ${code}, Reason: ${reason}`);
+            const reasonStr = reason ? reason.toString() : '';
+            console.log(`🔌 [${this.name}] [WS] Closed. Code: ${code}, Reason: ${reasonStr}`);
             this.auth_done = false;
             if (this.heartbeat) clearInterval(this.heartbeat);
             if (this.auth_timeout) clearTimeout(this.auth_timeout);

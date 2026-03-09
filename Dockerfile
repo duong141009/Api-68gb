@@ -1,5 +1,5 @@
 # Sử dụng Puppeteer base image có sẵn Chrome
-FROM ghcr.io/puppeteer/puppeteer:21.5.0
+FROM ghcr.io/puppeteer/puppeteer:22.15.0
 
 # Chuyển sang quyền root để thao tác file
 USER root

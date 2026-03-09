@@ -13,7 +13,7 @@ const shared = {
     PKT_HANDSHAKE: Buffer.from('010000727b22737973223a7b22706c6174666f726d223a226a732d776562736f636b6574222c22636c69656e744275696c644e756d626572223a22302e302e31222c22636c69656e7456657273696f6e223a22322e312e30227d7d', 'hex'),
     PKT_HANDSHAKE_ACK: Buffer.from('02000000', 'hex'),
     PKT_HEARTBEAT: Buffer.from('03000000', 'hex'),
-    PKT_AUTH: Buffer.from('0400004d01010001080210ca011a406436373738663230343862333434346662333661333535393837363162624036333634653530346431343234626163393738666363616464383839623466654200', 'hex'),
+    PKT_AUTH: null, // Sẽ được nạp từ file hoặc auto_fetcher
     COOKIES: "",
     SESSION_READY: false,
     fetcherActive: false
@@ -21,16 +21,27 @@ const shared = {
 
 if (fs.existsSync(TOKEN_FILE)) {
     shared.PKT_AUTH = fs.readFileSync(TOKEN_FILE);
+    shared.SESSION_READY = true;
     console.log("📖 [CONFIG] Đã nạp Token từ file");
+} else {
+    console.log("⚠️ [CONFIG] Không có token file. Cần auto_fetcher hoặc POST /api/token.");
 }
 
 const bot = new Bot68GB(shared);
 
 function triggerAutoFetch() {
     if (shared.fetcherActive) {
-        console.log("⏳ [SYSTEM] Fetcher already active. Skipping duplicate trigger.");
+        console.log("⏳ [SYSTEM] Fetcher already active. Double-check for zombies...");
+        // Re-check safety but don't spawn another one if flag is true
         return;
     }
+
+    // NUCLEAR: Kill any existing node fetchers before starting
+    try {
+        exec('pkill -f "node auto_fetcher.js"');
+        console.log("🧹 [SYSTEM] Cleaning up any old fetcher processes...");
+    } catch (e) { }
+
     shared.fetcherActive = true;
     console.log("🔄 [SYSTEM] Triggering auto_fetcher...");
     const cmd = `node auto_fetcher.js`;
@@ -46,9 +57,22 @@ function triggerAutoFetch() {
 }
 
 const server = http.createServer((req, res) => {
+    // Handle CORS preflight (OPTIONS)
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204, {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Max-Age': '86400'
+        });
+        return res.end();
+    }
+
     const _cors = (code, body = null, type = 'application/json') => {
         res.writeHead(code, {
             'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
             'Content-Type': type + '; charset=utf-8'
         });
         res.end(body ? (typeof body === 'string' ? body : JSON.stringify(body)) : "");
@@ -91,6 +115,8 @@ const server = http.createServer((req, res) => {
         _cors(200, bot.md5.history.slice().reverse());
     } else if (req.url === '/api/refetch') {
         triggerAutoFetch(); _cors(200, { status: "triggered" });
+    } else if (req.url === '/healthz' || req.url === '/health') {
+        _cors(200, { status: "ok", bot_alive: bot.isAlive(), session_ready: shared.SESSION_READY, uptime: process.uptime() });
     } else if (req.url === '/' || req.url === '/index.html') {
         _cors(200, getLandingPage(bot.isAlive()), 'text/html');
     } else {
@@ -101,33 +127,30 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] Unified API on Port ${PORT}`);
 
-    // Nếu chạy trên Render hoặc không có token file, tự động kích hoạt lấy token
-    if (!fs.existsSync(TOKEN_FILE) || process.env.RENDER) {
-        console.log("🆕 [INIT] Không tìm thấy Token hoặc đang chạy Cloud. Đang tự động lấy mã...");
-
-        if (process.env.RENDER) {
-            console.log("⏳ [WAIT] Đang đợi fetcher cung cấp Token/URL lần đầu...");
-            let retryCount = 0;
-            const checkInitial = setInterval(() => {
-                if (shared.SESSION_READY) {
-                    clearInterval(checkInitial);
-                    console.log("🚀 [START] Đã có dữ liệu phiên bộ lọc (SESSION_READY). Khởi động Bot...");
-                    bot.run();
-                } else {
-                    retryCount++;
-                    if (retryCount % 60 === 0) { // Thử lại mỗi 120s (60 * 2000ms) để tiết kiệm RAM trên Render
-                        console.log("🔁 [RETRY] Vẫn đang chờ Token... Thử trigger lại fetcher.");
-                        triggerAutoFetch();
-                    }
-                }
-            }, 2000);
-            setTimeout(triggerAutoFetch, 2000);
-        } else {
-            setTimeout(triggerAutoFetch, 5000);
-            bot.run();
-        }
-    } else {
+    if (shared.SESSION_READY) {
+        // Đã có token sẵn → khởi động bot ngay
+        console.log("✅ [INIT] Token sẵn sàng. Khởi động Bot...");
         bot.run();
+    } else {
+        // Chưa có token → chạy fetcher và đợi
+        console.log("🆕 [INIT] Chưa có Token. Đang tự động lấy mã...");
+        setTimeout(triggerAutoFetch, 2000);
+
+        let retryCount = 0;
+        const checkInitial = setInterval(() => {
+            if (shared.SESSION_READY) {
+                clearInterval(checkInitial);
+                console.log("🚀 [START] Đã có Token từ fetcher! Khởi động Bot...");
+                bot.run();
+            } else {
+                retryCount++;
+                // Retry fetcher mỗi 2 phút nếu vẫn chưa có token
+                if (retryCount > 0 && retryCount % 60 === 0) {
+                    console.log("🔁 [RETRY] Vẫn đang chờ Token... Trigger lại fetcher.");
+                    triggerAutoFetch();
+                }
+            }
+        }, 2000);
     }
 });
 
