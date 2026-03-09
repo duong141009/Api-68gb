@@ -36,6 +36,12 @@ async function fetchToken() {
         const client = await page.target().createCDPSession();
         await client.send('Network.enable');
 
+        let captured_ws_url = null;
+        client.on('Network.webSocketCreated', (params) => {
+            console.log(`🔗 [FETCH-JS] Phát hiện WebSocket: ${params.url}`);
+            captured_ws_url = params.url;
+        });
+
         client.on('Network.webSocketFrameSent', async (params) => {
             const payload = params.response.payloadData;
             const buffer = Buffer.from(payload, 'base64');
@@ -45,9 +51,16 @@ async function fetchToken() {
                 console.log("✅ [FETCH-JS] Bắt được Token! Đang gửi về Bot...");
 
                 try {
+                    const cookies = await page.cookies();
+                    const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+
                     const response = await fetch(BOT_SERVER, {
                         method: 'POST',
-                        body: JSON.stringify({ token: hex }),
+                        body: JSON.stringify({
+                            token: hex,
+                            ws_url: captured_ws_url,
+                            cookies: cookieStr
+                        }),
                         headers: { 'Content-Type': 'application/json' }
                     });
                     const res = await response.json();

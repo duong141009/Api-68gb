@@ -54,18 +54,25 @@ class Bot68GB {
                         this.ws.send(this._makePacket(r));
                 }, 400 * (i + 1));
             });
-            setTimeout(() => {
-                this.auth_done = true;
-                this.reconnect_delay = 1000; // Reset delay when auth succeeds
-                console.log("✅ [AUTH] Hoàn tất!");
+
+            // Clear previous completion timeout if any
+            if (this.auth_done_timeout) clearTimeout(this.auth_done_timeout);
+            this.auth_done_timeout = setTimeout(() => {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.auth_done = true;
+                    this.reconnect_delay = 1000; // Reset delay when auth succeeds
+                    console.log("✅ [AUTH] Hoàn tất!");
+                }
             }, 6000);
         }, 1000);
     }
 
     run() {
+        this.req_id = Math.floor(Math.random() * 1000) + 500; // Reset req_id on start
         const headers = {
             "Origin": "https://68gbvn88.bar",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+            "Cookie": this.shared.COOKIES || ""
         };
         this.ws = new WebSocket(this.shared.WS_URL, { headers });
 
@@ -80,23 +87,32 @@ class Bot68GB {
                     this.ws.send(this._makePacket("gamecen.gamecenter.queryjackpot"));
 
                     const now = Date.now();
-                    // Nếu quá 30 giây không có data mới, ép re-subscribe
-                    // CHỈ re-subscribe nếu ĐÃ AUTH XONG để tránh bị server kick
-                    if (this.auth_done && (now - this.txhu.last_msg > 30000 || now - this.md5.last_msg > 30000)) {
-                        console.log(`📡 [WS] Data stale (>30s). Re-entering rooms...`);
-                        const reEntry = [
-                            "mnshaibao.mnshaibaohandler.entergameroom",
-                            "mnshaibao.mnshaibaohandler.getgamescene",
-                            "mnmdsb.mnmdsbhandler.entergameroom",
-                            "mnmdsb.mnmdsbhandler.getgamescene"
-                        ];
-                        reEntry.forEach((r, i) => {
-                            setTimeout(() => {
-                                if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r));
-                            }, 300 * i);
-                        });
-                        this.txhu.last_msg = now;
-                        this.md5.last_msg = now;
+
+                    // Kiểm tra im lặng tuyệt đối (không có bất kỳ message nào trong 60s)
+                    const lastAny = Math.max(this.txhu.last_msg, this.md5.last_msg);
+                    if (now - lastAny > 60000) {
+                        console.log("💀 [WS] Tuyệt đối im lặng (>60s). Đang ép kết nối lại...");
+                        this.ws.close();
+                        return;
+                    }
+
+                    if (this.auth_done) {
+                        // Tách riêng check stale cho từng game
+                        if (now - this.txhu.last_msg > 35000) {
+                            console.log(`📡 [WS] TX Hũ data stale (>35s). Re-entering...`);
+                            ["mnshaibao.mnshaibaohandler.entergameroom", "mnshaibao.mnshaibaohandler.getgamescene"].forEach((r, i) => {
+                                setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
+                            });
+                            this.txhu.last_msg = now; // Tránh spam re-entry
+                        }
+
+                        if (now - this.md5.last_msg > 35000) {
+                            console.log(`📡 [WS] TX MD5 data stale (>35s). Re-entering...`);
+                            ["mnmdsb.mnmdsbhandler.entergameroom", "mnmdsb.mnmdsbhandler.getgamescene"].forEach((r, i) => {
+                                setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
+                            });
+                            this.md5.last_msg = now;
+                        }
                     }
                 }
             }, 10000);
@@ -112,6 +128,13 @@ class Bot68GB {
             } else if (data[0] === 0x05) {
                 console.log(`⚠️ [WS] Bị KICK.`);
                 this.ws.close();
+            } else {
+                // Log unhandled packet types once to see if server sends error/info
+                if (!this._logged_types) this._logged_types = new Set();
+                if (!this._logged_types.has(data[0])) {
+                    console.log(`ℹ️ [WS] Nhận packet loại: 0x${data[0].toString(16).padStart(2, '0')}`);
+                    this._logged_types.add(data[0]);
+                }
             }
         });
 
@@ -120,6 +143,8 @@ class Bot68GB {
             this.auth_done = false;
             if (this.heartbeat) clearInterval(this.heartbeat);
             if (this.auth_timeout) clearTimeout(this.auth_timeout);
+            if (this.auth_done_timeout) clearTimeout(this.auth_done_timeout);
+            this._logged_types = null;
 
             console.log(`🔁 [WS] Reconnecting in ${this.reconnect_delay / 1000}s...`);
             setTimeout(() => {

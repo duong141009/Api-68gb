@@ -13,7 +13,8 @@ const shared = {
     PKT_HANDSHAKE: Buffer.from('010000727b22737973223a7b22706c6174666f726d223a226a732d776562736f636b6574222c22636c69656e744275696c644e756d626572223a22302e302e31222c22636c69656e7456657273696f6e223a223061323134383164373436663932663834323865316236646565623736666561227d7d', 'hex'),
     PKT_HANDSHAKE_ACK: Buffer.from('02000000', 'hex'),
     PKT_HEARTBEAT: Buffer.from('03000000', 'hex'),
-    PKT_AUTH: Buffer.from('0400004d01010001080210ca011a406436373738663230343862333434346662333661333535393837363162624036333634653530346431343234626163393738666363616464383839623466654200', 'hex')
+    PKT_AUTH: Buffer.from('0400004d01010001080210ca011a406436373738663230343862333434346662333661333535393837363162624036333634653530346431343234626163393738666363616464383839623466654200', 'hex'),
+    COOKIES: ""
 };
 
 if (fs.existsSync(TOKEN_FILE)) {
@@ -46,6 +47,17 @@ const server = http.createServer((req, res) => {
                 const data = JSON.parse(body);
                 const hex = data.token.replace(/b'|'|\\x| /g, "");
                 shared.PKT_AUTH = Buffer.from(hex, 'hex');
+
+                if (data.ws_url) {
+                    shared.WS_URL = data.ws_url;
+                    console.log(`📡 [TOKEN] New WebSocket URL: ${shared.WS_URL}`);
+                }
+
+                if (data.cookies) {
+                    shared.COOKIES = data.cookies;
+                    console.log(`🍪 [TOKEN] Cookies updated!`);
+                }
+
                 fs.writeFileSync(TOKEN_FILE, shared.PKT_AUTH);
                 console.log("🔥 [TOKEN] Shared Token Updated!");
                 if (bot.ws) bot.ws.close();
