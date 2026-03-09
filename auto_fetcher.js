@@ -41,6 +41,13 @@ async function fetchToken() {
         const page = await browser.newPage();
         await page.setUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36");
 
+        page.on('console', msg => {
+            const text = msg.text();
+            // Lọc bớt log rác của cocos
+            if (text.includes('Failed to load resource') || text.length > 200) return;
+            console.log(`[PAGE-LOG] ${text}`);
+        });
+
         // ========== CDP: Bắt WebSocket qua DevTools Protocol ==========
         const client = await page.createCDPSession();
         await client.send('Network.enable');
@@ -141,7 +148,7 @@ async function fetchToken() {
 
         try {
             // waitUntil: domcontentloaded thay vì networkidle2 để nhanh hơn
-            await page.goto(GAME_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await page.goto(GAME_URL, { waitUntil: 'domcontentloaded', timeout: 90000 });
         } catch (e) {
             console.log(`⚠️ [NAV] ${e.message.substring(0, 100)}. Tiếp tục chờ...`);
         }
@@ -150,20 +157,20 @@ async function fetchToken() {
         const pageTitle = await page.title().catch(() => '');
         console.log(`📄 [PAGE] URL=${pageUrl} Title="${pageTitle}"`);
 
-        // Đợi tối đa 30 giây cho token
-        console.log(`⏳ [WAIT] Chờ token (max 30s)... WS: ${Object.keys(wsMap).length}`);
+        // Đợi tối đa 90 giây cho token (Render tải resources chậm do không có cache)
+        console.log(`⏳ [WAIT] Chờ token (max 90s)... WS: ${Object.keys(wsMap).length}`);
 
         await new Promise((resolve) => {
             const timeout = setTimeout(async () => {
                 if (!tokenCaptured) {
-                    console.log(`⏰ [TIMEOUT] Hết 30s. WS mở: ${Object.keys(wsMap).length}`);
+                    console.log(`⏰ [TIMEOUT] Hết 90s. WS mở: ${Object.keys(wsMap).length}`);
                     try {
                         const content = await page.content();
                         console.log(`[PAGE HTML] ${content.substring(0, 500)}...`);
                     } catch (e) { }
                     resolve();
                 }
-            }, 30000); // 30s timeout
+            }, 90000); // 90s timeout
 
             const check = setInterval(() => {
                 if (tokenCaptured) {
