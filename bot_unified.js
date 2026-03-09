@@ -1,10 +1,69 @@
 const WebSocket = require('ws');
+const puppeteer = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+
+puppeteer.use(StealthPlugin());
+
+async function getWSS(landing) {
+    // Nếu có WS_URL trong môi trường, dùng luôn (Bypass Puppeteer)
+    if (process.env.WS_URL) {
+        console.log(`🌍 [WSS-FETCH] Using WS_URL from ENV: ${process.env.WS_URL}`);
+        return process.env.WS_URL;
+    }
+
+    let browser = null;
+    try {
+        console.log(`🌐 [WSS-FETCH] Launching browser to find WSS...`);
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process"
+            ]
+        });
+
+        const page = await browser.newPage();
+        const client = await page.createCDPSession();
+        await client.send("Network.enable");
+
+        let wssUrl = null;
+
+        // Listen for WebSocket creation events
+        const waitWss = new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+                reject(new Error("Timeout waiting for WSS (90s)"));
+            }, 90000);
+
+            client.on("Network.webSocketCreated", (p) => {
+                console.log(`📡 [WSS-FETCH] WS Created: ${p.url}`);
+                if (p.url.includes("wss://")) {
+                    clearTimeout(timeoutId);
+                    resolve(p.url);
+                }
+            });
+        });
+
+        console.log(`🌐 [WSS-FETCH] Opening game: ${landing}`);
+        await page.goto(landing, { waitUntil: "domcontentloaded", timeout: 90000 });
+
+        wssUrl = await waitWss;
+        return wssUrl;
+    } catch (err) {
+        console.error(`❌ [WSS-FETCH] Lỗi khi lấy WSS: ${err.message}`);
+        throw err;
+    } finally {
+        if (browser) await browser.close();
+    }
+}
 
 class Bot68GB {
     constructor(shared) {
         this.shared = shared;
-        this.id = Math.random().toString(36).substring(7).toUpperCase();
-        this.name = `ULTIMATE-BOT-${this.id}`;
+        this.name = "ULTIMATE-BOT";
         this.ws = null;
         this.auth_done = false;
         this.req_id = Math.floor(Math.random() * 1000) + 500;
@@ -15,8 +74,6 @@ class Bot68GB {
         this.reconnect_delay = 1000;
         this.max_reconnect_delay = 30000;
         this.auth_timeout = null;
-        this.auth_done_timeout = null;
-        this.heartbeat = null;
     }
 
     _makePacket(route, body = "{}") {
@@ -37,15 +94,10 @@ class Bot68GB {
 
     _authFlow() {
         if (this.auth_done) return;
-        console.log(`🚀 [${this.name}] [AUTH] Khởi động...`);
+        console.log(`🚀 [AUTH] Khởi động...`);
         if (this.auth_timeout) clearTimeout(this.auth_timeout);
         this.auth_timeout = setTimeout(() => {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-            if (!this.shared.PKT_AUTH) {
-                console.log(`⚠️ [${this.name}] [AUTH] Chưa có PKT_AUTH. Đóng kết nối để chờ token...`);
-                this.ws.close();
-                return;
-            }
             this.ws.send(this.shared.PKT_AUTH);
 
             const routes = [
@@ -62,66 +114,64 @@ class Bot68GB {
                         this.ws.send(this._makePacket(r));
                 }, 400 * (i + 1));
             });
-
-            // Clear previous completion timeout if any
-            if (this.auth_done_timeout) clearTimeout(this.auth_done_timeout);
-            this.auth_done_timeout = setTimeout(() => {
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    this.auth_done = true;
-                    this.reconnect_delay = 1000; // Reset delay when auth succeeds
-                    console.log(`✅ [${this.name}] [AUTH] Hoàn tất!`);
-                }
+            setTimeout(() => {
+                this.auth_done = true;
+                this.reconnect_delay = 1000; // Reset delay when auth succeeds
+                console.log("✅ [AUTH] Hoàn tất!");
             }, 6000);
         }, 1000);
     }
 
-    run() {
-        this.req_id = Math.floor(Math.random() * 1000) + 500; // Reset req_id on start
+    async run(landingPage = "https://68gbvn88.bar") {
+        this.req_id = Math.floor(Math.random() * 1000) + 500;
+
+        try {
+            // Chỉ tìm WSS nếu chưa có trong shared
+            if (!this.shared.WS_URL || this.shared.WS_URL.length < 10) {
+                console.log(`📡 [${this.name}] Đang tìm kiếm WSS từ: ${landingPage}...`);
+                this.shared.WS_URL = await getWSS(landingPage);
+                console.log(`✨ [${this.name}] WSS FOUND: ${this.shared.WS_URL}`);
+            } else {
+                console.log(`📡 [${this.name}] Using existing WSS: ${this.shared.WS_URL}`);
+            }
+        } catch (err) {
+            console.error(`❌ [${this.name}] Không thể khởi động bot vì lỗi WSS. Reconnecting later...`);
+            setTimeout(() => this.run(landingPage), 10000);
+            return;
+        }
+
         const headers = {
-            "Origin": "https://68gbvn88.bar",
+            "Origin": landingPage,
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
             "Cookie": this.shared.COOKIES || ""
         };
         this.ws = new WebSocket(this.shared.WS_URL, { headers });
 
         this.ws.on('open', () => {
-            console.log(`🌐 [${this.name}] [WS] Connected.`);
-            if (this.heartbeat) clearInterval(this.heartbeat); // Clear trước khi tạo mới, tránh leak
-            this.txhu.last_msg = Date.now(); // Reset timestamp khi mới kết nối
-            this.md5.last_msg = Date.now();
+            console.log(`🌐 [WS] Connected.`);
             this.ws.send(this.shared.PKT_HANDSHAKE);
-            console.log(`🤖 [${this.name}] Đang khởi tạo luồng dữ liệu...`);
             this.heartbeat = setInterval(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send(this.shared.PKT_HEARTBEAT);
                     this.ws.send(this._makePacket("gamecen.gamecenter.queryjackpot"));
 
                     const now = Date.now();
-
-                    // Kiểm tra im lặng tuyệt đối (không có bất kỳ message nào trong 60s)
-                    const lastAny = Math.max(this.txhu.last_msg, this.md5.last_msg);
-                    if (now - lastAny > 60000) {
-                        console.log(`💀 [${this.name}] [WS] Tuyệt đối im lặng (>60s). Đang ép kết nối lại...`);
-                        this.ws.close();
-                        return;
-                    }
-
-                    if (this.auth_done) {
-                        // Tách riêng check stale cho từng game (tăng lên 90s để bù cho vòng cược dài)
-                        if (now - this.txhu.last_msg > 90000) {
-                            console.log(`📡 [${this.name}] [WS] TX Hũ data stale (>90s). Re-entering...`);
-                            ["mnshaibao.mnshaibaohandler.entergameroom", "mnshaibao.mnshaibaohandler.getgamescene"].forEach((r, i) => {
-                                setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
-                            });
-                            this.txhu.last_msg = now; // Tránh spam re-entry
-                        }
-                        if (now - this.md5.last_msg > 90000) {
-                            console.log(`📡 [${this.name}] [WS] TX MD5 data stale (>90s). Re-entering...`);
-                            ["mnmdsb.mnmdsbhandler.entergameroom", "mnmdsb.mnmdsbhandler.getgamescene"].forEach((r, i) => {
-                                setTimeout(() => { if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r)); }, 300 * i);
-                            });
-                            this.md5.last_msg = now;
-                        }
+                    // Nếu quá 30 giây không có data mới, ép re-subscribe
+                    if (now - this.txhu.last_msg > 30000 || now - this.md5.last_msg > 30000) {
+                        console.log(`📡 [WS] Data stale (>30s). Re-entering rooms...`);
+                        const reEntry = [
+                            "mnshaibao.mnshaibaohandler.entergameroom",
+                            "mnshaibao.mnshaibaohandler.getgamescene",
+                            "mnmdsb.mnmdsbhandler.entergameroom",
+                            "mnmdsb.mnmdsbhandler.getgamescene"
+                        ];
+                        reEntry.forEach((r, i) => {
+                            setTimeout(() => {
+                                if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(this._makePacket(r));
+                            }, 300 * i);
+                        });
+                        this.txhu.last_msg = now;
+                        this.md5.last_msg = now;
                     }
                 }
             }, 10000);
@@ -133,39 +183,23 @@ class Bot68GB {
                 this.ws.send(this.shared.PKT_HANDSHAKE_ACK);
                 this._authFlow();
             } else if (data[0] === 0x04) {
-                this.txhu.last_msg = Date.now(); // Cập nhật heartbeat khi có bất kỳ data data nào
-                this.md5.last_msg = Date.now();
                 this._parse(data);
             } else if (data[0] === 0x05) {
-                console.log(`⚠️ [${this.name}] [WS] Bị KICK.`);
+                console.log(`⚠️ [WS] Bị KICK.`);
                 this.ws.close();
-            } else {
-                // Log unhandled packet types once to see if server sends error/info
-                if (!this._logged_types) this._logged_types = new Set();
-                if (!this._logged_types.has(data[0])) {
-                    console.log(`ℹ️ [${this.name}] [WS] Nhận packet loại: 0x${data[0].toString(16).padStart(2, '0')}`);
-                    this._logged_types.add(data[0]);
-                }
             }
         });
 
-        this.ws.on('error', (err) => {
-            console.error(`❌ [${this.name}] [WS] Lỗi kết nối: ${err.message}`);
-        });
-
         this.ws.on('close', (code, reason) => {
-            const reasonStr = reason ? reason.toString() : '';
-            console.log(`🔌 [${this.name}] [WS] Closed. Code: ${code}, Reason: ${reasonStr}`);
+            console.log(`🔌 [WS] Closed. Code: ${code}, Reason: ${reason}`);
             this.auth_done = false;
             if (this.heartbeat) clearInterval(this.heartbeat);
             if (this.auth_timeout) clearTimeout(this.auth_timeout);
-            if (this.auth_done_timeout) clearTimeout(this.auth_done_timeout);
-            this._logged_types = null;
 
             console.log(`🔁 [${this.name}] [WS] Reconnecting in ${this.reconnect_delay / 1000}s...`);
             setTimeout(() => {
                 this.reconnect_delay = Math.min(this.reconnect_delay * 1.5, this.max_reconnect_delay);
-                this.run();
+                this.run(landingPage);
             }, this.reconnect_delay);
         });
     }
@@ -259,7 +293,7 @@ class Bot68GB {
         if (hist.length > 300) hist.shift();
         target.last_result = entry;
 
-        console.log(`🎰 [${this.name}] [${game}] #${s} | ${total} ${res} | ${d1}-${d2}-${d3}`);
+        console.log(`🎰 [${game}] #${s} | ${total} ${res} | ${d1}-${d2}-${d3}`);
     }
 
     isAlive() { return this.ws && this.ws.readyState === WebSocket.OPEN && this.auth_done; }
