@@ -22,12 +22,15 @@ async function fetchToken() {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu',
                 '--no-zygote',
                 '--disable-extensions',
                 '--single-process',
                 '--disable-web-security',
-                '--disable-features=IsolateOrigins,site-per-process'
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--use-gl=angle',
+                '--use-angle=swiftshader', // Fallback to software rendering for WebGL
+                '--mute-audio',            // Prevent audio context stalls
+                '--ignore-gpu-blocklist',  // Allow WebGL on older/headless drivers
             ],
             defaultViewport: { width: 1280, height: 720 }
         });
