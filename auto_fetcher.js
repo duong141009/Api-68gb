@@ -19,13 +19,17 @@ async function fetchToken() {
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--single-process' // Tiết kiệm RAM trên Render
+                '--no-zygote' // Thay cho --single-process để ổn định hơn
             ]
         };
 
-        // Nếu ở local Linux của bác thì mới ép path Chrome
-        if (fs.existsSync('/usr/bin/google-chrome')) {
-            launchOptions.executablePath = '/usr/bin/google-chrome';
+        // Ưu tiên path trên Render/Docker pptr image
+        const paths = ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome'];
+        for (const p of paths) {
+            if (fs.existsSync(p)) {
+                launchOptions.executablePath = p;
+                break;
+            }
         }
 
         browser = await puppeteer.launch(launchOptions);

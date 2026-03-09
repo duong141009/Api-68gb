@@ -3,7 +3,8 @@ const WebSocket = require('ws');
 class Bot68GB {
     constructor(shared) {
         this.shared = shared;
-        this.name = "ULTIMATE-BOT";
+        this.id = Math.random().toString(36).substring(7).toUpperCase();
+        this.name = `ULTIMATE-BOT-${this.id}`;
         this.ws = null;
         this.auth_done = false;
         this.req_id = Math.floor(Math.random() * 1000) + 500;
@@ -81,6 +82,7 @@ class Bot68GB {
             this.txhu.last_msg = Date.now(); // Reset timestamp khi mới kết nối
             this.md5.last_msg = Date.now();
             this.ws.send(this.shared.PKT_HANDSHAKE);
+            console.log(`🤖 [${this.name}] Đang khởi tạo luồng dữ liệu...`);
             this.heartbeat = setInterval(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send(this.shared.PKT_HEARTBEAT);

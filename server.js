@@ -90,14 +90,20 @@ server.listen(PORT, '0.0.0.0', () => {
     if (!fs.existsSync(TOKEN_FILE) || process.env.RENDER) {
         console.log("🆕 [INIT] Không tìm thấy Token hoặc đang chạy Cloud. Đang tự động lấy mã...");
 
-        // Trên Cloud, đợi fetcher có token lần đầu rồi mới chạy Bot để tránh 1006 loop
         if (process.env.RENDER) {
             console.log("⏳ [WAIT] Đang đợi fetcher cung cấp Token/URL lần đầu...");
+            let retryCount = 0;
             const checkInitial = setInterval(() => {
-                if (shared.COOKIES !== "") { // Dùng Cookies làm dấu hiệu đã fetch xong
+                if (shared.COOKIES && shared.COOKIES !== "") {
                     clearInterval(checkInitial);
-                    console.log("🚀 [START] Đã có dữ liệu phiên mới. Khởi động Bot...");
+                    console.log("🚀 [START] Đã có dữ liệu phiên bộ lọc. Khởi động Bot...");
                     bot.run();
+                } else {
+                    retryCount++;
+                    if (retryCount % 15 === 0) { // Thử lại mỗi 30s nếu chưa có token
+                        console.log("🔁 [RETRY] Vẫn đang chờ Token... Thử trigger lại fetcher.");
+                        triggerAutoFetch();
+                    }
                 }
             }, 2000);
             setTimeout(triggerAutoFetch, 2000);
