@@ -1,4 +1,6 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
 const GAME_URL = "https://68gbvn88.bar/";
 const BOT_SERVER = process.env.BOT_SERVER || "http://localhost:8080/api/token";
@@ -24,7 +26,8 @@ async function fetchToken() {
                 '--no-zygote',
                 '--disable-extensions',
                 '--single-process',
-                '--disable-web-security'
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process'
             ],
             defaultViewport: { width: 1280, height: 720 }
         });
