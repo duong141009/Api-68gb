@@ -32,15 +32,15 @@ const bot = new Bot68GB(shared);
 let fetcherChild = null;
 
 function triggerAutoFetch() {
-    if (shared.fetcherActive && fetcherChild && !fetcherChild.killed) {
-        console.log("⏳ [SYSTEM] Fetcher đang chạy (PID: " + fetcherChild.pid + "). Bỏ qua.");
+    // Nếu fetcher đang chạy, bỏ qua hoàn toàn
+    if (shared.fetcherActive) {
+        console.log("⏳ [SYSTEM] Fetcher đang active. Bỏ qua.");
         return;
     }
 
     // Kill zombie fetchers (đồng bộ để tránh race condition)
     try {
         execSync('pkill -f "node auto_fetcher.js" 2>/dev/null || true', { timeout: 3000 });
-        console.log("🧹 [SYSTEM] Đã dọn old fetcher processes.");
     } catch (e) { /* ignore */ }
 
     // Đợi 500ms để đảm bảo pkill hoàn tất
@@ -164,10 +164,13 @@ server.listen(PORT, '0.0.0.0', () => {
                 bot.run();
             } else {
                 retryCount++;
-                // Retry fetcher mỗi 2 phút nếu vẫn chưa có token
-                if (retryCount > 0 && retryCount % 60 === 0) {
-                    console.log("🔁 [RETRY] Vẫn đang chờ Token... Trigger lại fetcher.");
+                // Chỉ retry nếu fetcher KHÔNG đang chạy (đã thoát/thất bại)
+                // Check mỗi 5 phút (150 * 2000ms)
+                if (!shared.fetcherActive && retryCount % 150 === 0) {
+                    console.log("🔁 [RETRY] Fetcher đã thoát nhưng chưa có Token. Trigger lại...");
                     triggerAutoFetch();
+                } else if (retryCount % 30 === 0) {
+                    console.log(`⏳ [WAIT] Đang chờ Token... (fetcher ${shared.fetcherActive ? 'đang chạy' : 'dừng'})`);
                 }
             }
         }, 2000);
